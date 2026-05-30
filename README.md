@@ -11,12 +11,61 @@ Stable library from PyPi:
 
 * Just run `sudo pip install fanshim`
 
+Note for virtualenv/development installs:
+
+* If you install this project with `pip install -e library`, `RPi.GPIO` is not installed automatically.
+* Install it explicitly with `pip install RPi.GPIO` (or install your distro package, for example `python3-rpi.gpio`).
+* The `examples/automatic.py` script also requires `psutil`, install it with `pip install psutil`.
+
 Latest/development library from GitHub:
 
 * `apt install git python3-pip`
 * `git clone https://github.com/pimoroni/fanshim-python`
 * `cd fanshim-python`
 * `sudo ./install.sh`
+
+Hardware PWM controller (recommended for low noise):
+
+* Use `examples/automatic_always_run.py` for the optimized controller with native hardware PWM, smooth ramps and thermal step logic.
+* Use `examples/manual-duty.py` to test fixed duty/frequency combinations and identify the quietest stable operating point for your fan.
+
+Requirements for hardware PWM on GPIO 18:
+
+* In `/boot/firmware/config.txt` (or `/boot/config.txt` on older systems), set:
+    * `dtparam=audio=off`
+    * `dtoverlay=pwm`
+* Reboot after editing boot config.
+* Install Python dependency: `pip install rpi-hardware-pwm`
+
+Run the controller (from active virtualenv):
+
+* `sudo $(which python3) ./examples/automatic_always_run.py --verbose`
+
+Profiles suggested for Raspberry Pi 4 via SSH/VS Code:
+
+* Balanced and quiet (recommended):
+    * `--temp-min 55 --temp-step1 65 --temp-step2 72 --temp-max 80`
+* Ultra-quiet:
+    * `--temp-min 58 --temp-step1 68 --temp-step2 74 --temp-max 80`
+
+Why these values:
+
+* During typical SSH/VS Code usage, CPU often stays around 45-53C, so the fan can remain at minimum duty for most of the time.
+* Delaying the jump to higher steps reduces sudden noisy transitions while keeping a strong safety barrier at 80C (thermal throttling threshold).
+
+Example commands:
+
+* Balanced and quiet:
+    * `sudo $(which python3) ./examples/automatic_always_run.py --verbose --temp-min 55 --temp-step1 65 --temp-step2 72 --temp-max 80`
+* Ultra-quiet:
+    * `sudo $(which python3) ./examples/automatic_always_run.py --verbose --temp-min 58 --temp-step1 68 --temp-step2 74 --temp-max 80`
+
+Install as a service with the new installer:
+
+* Balanced and quiet:
+    * `sudo ./examples/install-service-always.sh --temp-min 55 --temp-step1 65 --temp-step2 72 --temp-max 80 --min-pwm 5 --duty-ramp-max 20 --duty-step1 50 --duty-step2 80 --max-pwm 100 --pwm-frequency 25000 --delay 2 --cooldown-delay 60 --max-duty-step 0.1 --hot-duty-step 5.0 --duty-deadband 0.5 --temp-alpha 0.30 --startup-boost-duty 100 --startup-boost-seconds 3`
+* Ultra-quiet:
+    * `sudo ./examples/install-service-always.sh --temp-min 58 --temp-step1 68 --temp-step2 74 --temp-max 80 --min-pwm 5 --duty-ramp-max 20 --duty-step1 50 --duty-step2 80 --max-pwm 100 --pwm-frequency 25000 --delay 2 --cooldown-delay 60 --max-duty-step 0.1 --hot-duty-step 5.0 --duty-deadband 0.5 --temp-alpha 0.30 --startup-boost-duty 100 --startup-boost-seconds 3`
 
 # Reference
 
