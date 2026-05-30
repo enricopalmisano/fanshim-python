@@ -1,6 +1,8 @@
 #!/bin/bash
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+PROJECT_ROOT="$(realpath "$DIR/..")"
+DEFAULT_VENV="$PROJECT_ROOT/test-env/bin"
 TEMP_MIN=58
 TEMP_STEP1=68
 TEMP_STEP2=74
@@ -33,6 +35,12 @@ LEGACY_SERVICE=pimoroni-fanshim.service
 ALWAYS_SERVICE=pimoroni-fanshim-always.service
 
 USAGE="sudo ./install-service-always.sh --temp-min <n> --temp-step1 <n> --temp-step2 <n> --temp-max <n> --min-pwm <n> --duty-ramp-max <n> --duty-step1 <n> --duty-step2 <n> --max-pwm <n> --pwm-frequency <n> --startup-boost-duty <n> --startup-boost-seconds <n> --delay <n> --cooldown-delay <n> --max-duty-step <n> --hot-duty-step <n> --duty-deadband <n> --temp-alpha <n> --brightness <n> --venv <python_virtual_environment> (--preempt) (--noled) (--extended-colours)"
+
+# Prefer project-local isolated environment when available.
+if [[ -x "$DEFAULT_VENV/python3" && -x "$DEFAULT_VENV/pip3" ]]; then
+	PYTHON="$DEFAULT_VENV/python3"
+	PIP="$DEFAULT_VENV/pip3"
+fi
 
 # Convert Python path to absolute for systemd
 PYTHON=$(type -P "$PYTHON")
