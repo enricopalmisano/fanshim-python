@@ -341,27 +341,34 @@ Or edit: $SERVICE_PATH
 
 EOF
 
+# UNIT_FILE AGGIORNATO E OTTIMIZZATO PER EVITARE RACE CONDITION AL BOOT
 read -r -d '' UNIT_FILE << EOF
 [Unit]
 Description=Fan Shim Always-On PWM Service
-After=multi-user.target
+After=multi-user.target sound.target udev.target
 
 [Service]
 Type=simple
 WorkingDirectory=$(pwd)
+ExecStartPre=/bin/sleep 5
 ExecStart=$PYTHON $(pwd)/automatic_always_run.py --temp-min $TEMP_MIN --temp-step1 $TEMP_STEP1 --temp-step2 $TEMP_STEP2 --temp-max $TEMP_MAX --min-pwm $MIN_PWM --duty-ramp-max $DUTY_RAMP_MAX --duty-step1 $DUTY_STEP1 --duty-step2 $DUTY_STEP2 --max-pwm $MAX_PWM --pwm-frequency $PWM_FREQUENCY --delay $DELAY --cooldown-delay $COOLDOWN_DELAY --max-duty-step $MAX_DUTY_STEP --hot-duty-step $HOT_DUTY_STEP --duty-deadband $DUTY_DEADBAND --temp-alpha $TEMP_ALPHA --startup-boost-duty $STARTUP_BOOST_DUTY --startup-boost-seconds $STARTUP_BOOST_SECONDS --brightness $BRIGHTNESS $EXTRA_ARGS
 Restart=on-failure
+RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 printf "Checking for rpi.gpio >= 0.7.0 (for Pi 4 support)\n"
+# Sostituita la dipendenza da pkg_resources con una comparazione di tuple nativa di Python
 $PYTHON - <<EOF
 import RPi.GPIO as GPIO
-from pkg_resources import parse_version
 import sys
-if parse_version(GPIO.VERSION) < parse_version('0.7.0'):
+try:
+    v = [int(x) for x in GPIO.VERSION.split('.')[:3]]
+    if v < [0, 7, 0]:
+        sys.exit(1)
+except Exception:
     sys.exit(1)
 EOF
 
@@ -385,11 +392,16 @@ else
 fi
 
 printf "Checking for psutil >= $PSUTIL_MIN_VERSION\n"
+# Sostituita la dipendenza da pkg_resources con una comparazione di tuple nativa di Python
 $PYTHON - > /dev/null 2>&1 <<EOF
 import sys
 import psutil
-from pkg_resources import parse_version
-sys.exit(not parse_version(psutil.__version__) >= parse_version('$PSUTIL_MIN_VERSION'))
+try:
+    v = [int(x) for x in psutil.__version__.split('.')[:3]]
+    min_v = [int(x) for x in '$PSUTIL_MIN_VERSION'.split('.')]
+    sys.exit(0 if v >= min_v else 1)
+except Exception:
+    sys.exit(1)
 EOF
 
 if [[ $? -ne 0 ]]; then
