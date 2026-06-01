@@ -18,7 +18,7 @@ parser.add_argument('--temp-step2', type=float, default=74.0, help='Temperature 
 parser.add_argument('--temp-max', type=float, default=80.0, help='Temperature in C for maximum step / 100 percent duty (default: 80.0)')
 
 # PARAMETRI DEI LIVELLI DI POTENZA (DUTY CYCLE)
-parser.add_argument('--min-pwm', type=float, default=5.0, help='Minimum fan duty cycle in percent (0-100)')
+parser.add_argument('--min-pwm', type=float, default=13.0, help='Minimum fan duty cycle in percent (0-100)')
 parser.add_argument('--duty-ramp-max', type=float, default=20.0, help='Maximum duty cycle for the gradual ramp range (default: 20.0)')
 parser.add_argument('--duty-step1', type=float, default=50.0, help='Duty cycle in percent for first step (default: 50.0)')
 parser.add_argument('--duty-step2', type=float, default=80.0, help='Duty cycle in percent for second step (default: 80.0)')
@@ -37,7 +37,7 @@ parser.add_argument('--verbose', action='store_true', default=False, help='Outpu
 parser.add_argument('--noled', action='store_true', default=False, help='Disable LED control')
 parser.add_argument('--brightness', type=float, default=255.0, help='LED brightness, from 0 to 255')
 parser.add_argument('--extended-colours', action='store_true', default=False, help='Extend LED colours outside normal temp range')
-parser.add_argument('--startup-boost-duty', type=float, default=100.0, help='Startup kick duty cycle in percent (0-100)')
+parser.add_argument('--startup-boost-duty', type=float, default=80.0, help='Startup kick duty cycle in percent (0-100)')
 parser.add_argument('--startup-boost-seconds', type=float, default=3.0, help='Duration of startup kick, in seconds')
 
 args = parser.parse_args()
@@ -130,16 +130,29 @@ def clean_exit(signum, frame):
 
 
 def get_cpu_temp():
-    temps = psutil.sensors_temperatures()
-    for sensor in ['cpu-thermal', 'cpu_thermal']:
-        if sensor in temps:
-            return temps[sensor][0].current
-    print('Warning: Unable to get CPU temperature!')
+    try:
+        temps = psutil.sensors_temperatures()
+        for sensor in ['cpu-thermal', 'cpu_thermal']:
+            if sensor in temps and len(temps[sensor]) > 0:
+                return temps[sensor][0].current
+    except Exception:
+        pass
+    print('Warning: Unable to get CPU temperature! (Using fallback 0.0)')
     return 0.0
 
 
 def get_cpu_freq():
-    return psutil.cpu_freq()
+    try:
+        freq = psutil.cpu_freq()
+        if freq is not None and hasattr(freq, 'current') and hasattr(freq, 'max'):
+            return freq
+    except Exception:
+        pass
+    
+    class DummyFreq:
+        current = 600.0
+        max = 1500.0
+    return DummyFreq()
 
 
 # LOGICA DINAMICA BASATA SUI PARAMETRI DI INGRESSO
@@ -216,10 +229,11 @@ def apply_startup_boost():
             )
         )
 
-    pwm.change_duty_cycle(args.min_pwm)
-    current_duty = args.min_pwm
+    # CORREZIONE FISICA: Invece di tagliare istantaneamente a min_pwm, inizializziamo current_duty a 100%
+    # e lasciamo che la rampa automatica del ciclo principale faccia scendere la ventola in modo graduale.
+    current_duty = args.startup_boost_duty
     if args.verbose:
-        print('Startup duty set to {:0.1f}%'.format(current_duty))
+        print('Startup duty initialized to {:0.1f}% (gradual cooldown ramp will follow)'.format(current_duty))
 
 
 signal.signal(signal.SIGTERM, clean_exit)
@@ -257,7 +271,7 @@ try:
                     # Se era già inferiore (es. 8.0%), mantiene quel valore per non causare sbalzi inutili
                     duty = cooldown_start_duty
             else:
-                # Se è rimasta stabilmente fredda per oltre un minuto continuo, scendiamo al minimo (5.0%)
+                # Se è rimasta stabilmente fredda per oltre un minuto continuo, scendiamo al minimo (8.0% o 10.0%)
                 duty = args.min_pwm
         else:
             # Se la temperatura risale sopra la soglia minima, resettiamo il timer di sicurezza
@@ -277,15 +291,27 @@ try:
             # Sopra lo step 1 (zona calda), usiamo la rampa rapida (5% a ciclo)
             step_size = args.hot_duty_step
         elif filtered_temp < args.temp_min:
-            # Sotto la temperatura minima (zona di cooldown), usiamo una rampa intermedia (2.0% a ciclo)
-            # per far scendere la ventola a regimi silenziosi in tempi rapidi (circa 20-30 secondi)
-            step_size = 2.0
+            # Sotto la temperatura minima (zona di cooldown)
+            if current_duty > args.duty_ramp_max:
+                # Se stiamo scendendo dal boost iniziale (che è molto alto), usiamo la rampa decisa (5% a ciclo)
+                step_size = args.hot_duty_step
+            else:
+                # Una volta vicini o sotto il massimo di rampa, scendiamo con l'intermedio (2.0% a ciclo)
+                step_size = 2.0
         else:
             # Nella rampa graduale tra temp-min e temp-step1, la rampa rimane dolcissima (0.1% a ciclo)
             step_size = args.max_duty_step
 
-        # Applichiamo lo step verso il target calcolato
-        duty = step_towards_target(current_duty, duty, step_size)
+        # LOGICA ASIMMETRICA DI ACCELERAZIONE/DECELERAZIONE DI SICUREZZA
+        # Se stiamo rallentando (decelerando la ventola), limitiamo lo step di discesa a massimo il 2.0%
+        # per consentire al motore di rallentare per inerzia senza generare tensioni anomale (back-EMF)
+        if duty < current_duty:
+            actual_step = min(step_size, 2.0)
+        else:
+            actual_step = step_size
+
+        # Applichiamo lo step effettivo calcolato verso il target
+        duty = step_towards_target(current_duty, duty, actual_step)
 
         if abs(duty - current_duty) >= 0.05:
             pwm.change_duty_cycle(duty)

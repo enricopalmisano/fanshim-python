@@ -129,6 +129,7 @@ The script supports these arguments:
 * `--temp-alpha N` temperature smoothing factor (0..1, default 0.30)
 * `--startup-boost-duty N` startup kick duty cycle in percent (default 100)
 * `--startup-boost-seconds N` startup kick duration in seconds (default 3.0)
+* `--startup-ramp-interval N` delay between startup ramp-down steps in seconds (default 0.1)
 * `--delay N` delay between temperature readings, in seconds (default 2)
 * `--preempt` set fan to max duty while CPU frequency is maxed (default off)
 * `--brightness` LED brightness (0-255, default 255)
@@ -158,6 +159,9 @@ You can tune startup kick from installer too:
 
 ```
 sudo ./install-service-always.sh --startup-boost-duty 100 --startup-boost-seconds 2
+
+# Slower startup ramp-down (smoother but longer)
+sudo ./install-service-always.sh --startup-ramp-interval 0.15
 ```
 
 The installer creates `pimoroni-fanshim-always.service` and automatically disables/stops
