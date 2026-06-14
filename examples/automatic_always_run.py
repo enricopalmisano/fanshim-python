@@ -190,7 +190,20 @@ def step_towards_target(current, target, max_step):
 
 def update_led_temperature(temp):
     temp = float(temp)
-    brightness_scale = args.brightness / 255.0
+    # Luminosita dinamica: minima a temp-min, massima a temp-max.
+    min_brightness_ratio = 0.20
+    if temp <= args.temp_min:
+        dynamic_brightness = args.brightness * min_brightness_ratio
+    elif temp >= args.temp_max:
+        dynamic_brightness = args.brightness
+    else:
+        brightness_ratio = (temp - args.temp_min) / (args.temp_max - args.temp_min)
+        brightness_ratio = clamp(brightness_ratio, 0.0, 1.0)
+        dynamic_brightness = args.brightness * (
+            min_brightness_ratio + (1.0 - min_brightness_ratio) * brightness_ratio
+        )
+
+    brightness_scale = dynamic_brightness / 255.0
 
     if temp >= args.temp_max:
         # Rosso intenso alla soglia massima.
