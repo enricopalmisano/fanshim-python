@@ -190,18 +190,41 @@ def step_towards_target(current, target, max_step):
 
 def update_led_temperature(temp):
     temp = float(temp)
-    # Scaliamo dinamicamente i colori del LED per riflettere i parametri immessi
-    if temp < args.temp_min:
-        hue = 120.0 / 360.0  # Verde puro sotto la temperatura minima
-    elif temp >= args.temp_max:
-        hue = 0.0  # Rosso puro sopra la temperatura massima
-    else:
-        # Colore sfumato da verde a rosso tra temp-min e temp-max
-        temp_ratio = (temp - args.temp_min) / (args.temp_max - args.temp_min)
-        temp_ratio = clamp(temp_ratio, 0.0, 1.0)
-        hue = (1.0 - temp_ratio) * 120.0 / 360.0
+    brightness_scale = args.brightness / 255.0
 
-    r, g, b = [int(c * 255.0) for c in colorsys.hsv_to_rgb(hue, 1.0, args.brightness / 255.0)]
+    if temp >= args.temp_max:
+        # Rosso intenso alla soglia massima.
+        base_r, base_g, base_b = (255, 0, 0)
+    elif temp >= args.temp_step2:
+        # Arcobaleno ciclico nella fascia alta di temperatura.
+        rainbow = [
+            (255, 0, 0),
+            (255, 127, 0),
+            (255, 255, 0),
+            (0, 255, 0),
+            (0, 0, 255),
+            (75, 0, 130),
+            (148, 0, 211),
+        ]
+        palette_index = int(time.time() * 4.0) % len(rainbow)
+        base_r, base_g, base_b = rainbow[palette_index]
+    elif temp >= args.temp_step1:
+        # Arancione stabile al raggiungimento di temp-step1.
+        base_r, base_g, base_b = (255, 165, 0)
+    elif temp < args.temp_min:
+        # Verde puro sotto la temperatura minima.
+        hue = 120.0 / 360.0
+        base_r, base_g, base_b = [int(c * 255.0) for c in colorsys.hsv_to_rgb(hue, 1.0, 1.0)]
+    else:
+        # Sfumatura da verde a arancione tra temp-min e temp-step1.
+        temp_ratio = (temp - args.temp_min) / (args.temp_step1 - args.temp_min)
+        temp_ratio = clamp(temp_ratio, 0.0, 1.0)
+        hue = (120.0 - (90.0 * temp_ratio)) / 360.0
+        base_r, base_g, base_b = [int(c * 255.0) for c in colorsys.hsv_to_rgb(hue, 1.0, 1.0)]
+
+    r = int(clamp(base_r * brightness_scale, 0.0, 255.0))
+    g = int(clamp(base_g * brightness_scale, 0.0, 255.0))
+    b = int(clamp(base_b * brightness_scale, 0.0, 255.0))
     fanshim.set_light(r, g, b)
 
 

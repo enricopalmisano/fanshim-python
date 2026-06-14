@@ -166,3 +166,11 @@ sudo ./install-service-always.sh --startup-ramp-interval 0.15
 
 The installer creates `pimoroni-fanshim-always.service` and automatically disables/stops
 the legacy `pimoroni-fanshim.service` if it is active.
+
+To stop or manage this service later:
+
+```
+sudo systemctl stop pimoroni-fanshim-always.service
+sudo systemctl disable pimoroni-fanshim-always.service
+systemctl status pimoroni-fanshim-always.service
+```
